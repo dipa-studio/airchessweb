@@ -3,13 +3,13 @@
 import { useMemo } from "react"
 import type { Square } from "chess.js"
 
-const GLYPH: Record<string, string> = {
-  k: "\u265A",
-  q: "\u265B",
-  r: "\u265C",
-  b: "\u265D",
-  n: "\u265E",
-  p: "\u265F",
+// Text-presentation selector (U+FE0E) forces monochrome text rendering so the
+// glyphs never turn into colored emoji (which would ignore our `color`).
+const VS = "\uFE0E"
+// Distinct codepoints per color: outline glyphs for white, filled for black.
+const GLYPH: Record<"w" | "b", Record<string, string>> = {
+  w: { k: "\u2654", q: "\u2655", r: "\u2656", b: "\u2657", n: "\u2658", p: "\u2659" },
+  b: { k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F" },
 }
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
@@ -95,14 +95,14 @@ export function ChessBoard({
                   className="relative z-10 leading-none"
                   style={{
                     fontSize: "min(9vw, 2.6rem)",
-                    color: piece.color === "w" ? "oklch(0.98 0.01 90)" : "oklch(0.16 0.01 60)",
+                    color: piece.color === "w" ? "oklch(0.98 0.01 90)" : "oklch(0.18 0.02 60)",
                     textShadow:
                       piece.color === "w"
-                        ? "0 1px 1px rgba(0,0,0,0.55)"
-                        : "0 1px 1px rgba(255,255,255,0.25)",
+                        ? "0 1px 2px rgba(0,0,0,0.7)"
+                        : "0 1px 2px rgba(255,255,255,0.35)",
                   }}
                 >
-                  {GLYPH[piece.type]}
+                  {GLYPH[piece.color][piece.type] + VS}
                 </span>
               )}
 

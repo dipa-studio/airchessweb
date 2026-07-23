@@ -179,7 +179,7 @@ export function AppRoot() {
           <div className="space-y-3 text-center">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-card">
               <span className="text-5xl" style={{ color: "var(--primary)" }} aria-hidden>
-                {"\u265E"}
+                {"\u265E\uFE0E"}
               </span>
             </div>
             <h1 className="text-balance text-3xl font-bold tracking-tight">WiFi Chess</h1>
