@@ -6,9 +6,12 @@ import type { Square } from "chess.js"
 // Text-presentation selector (U+FE0E) forces monochrome text rendering so the
 // glyphs never turn into colored emoji (which would ignore our `color`).
 const VS = "\uFE0E"
-// Distinct codepoints per color: outline glyphs for white, filled for black.
+// Both colors use the SOLID (filled) glyphs (U+265A–F) and are differentiated
+// purely by fill color + outline. The outline (U+2654–9) glyphs are hollow and,
+// when filled near-white, are nearly invisible on the light board squares —
+// so white pieces are drawn as solid white shapes with a dark outline instead.
 const GLYPH: Record<"w" | "b", Record<string, string>> = {
-  w: { k: "\u2654", q: "\u2655", r: "\u2656", b: "\u2657", n: "\u2658", p: "\u2659" },
+  w: { k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F" },
   b: { k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F" },
 }
 
@@ -95,11 +98,13 @@ export function ChessBoard({
                   className="relative z-10 leading-none"
                   style={{
                     fontSize: "min(9vw, 2.6rem)",
-                    color: piece.color === "w" ? "oklch(0.98 0.01 90)" : "oklch(0.18 0.02 60)",
+                    color: piece.color === "w" ? "oklch(0.985 0.005 90)" : "oklch(0.16 0.02 60)",
+                    // White pieces get a crisp dark outline so the solid white
+                    // glyph stays visible on the light board squares too.
                     textShadow:
                       piece.color === "w"
-                        ? "0 1px 2px rgba(0,0,0,0.7)"
-                        : "0 1px 2px rgba(255,255,255,0.35)",
+                        ? "0 0 1px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.55)"
+                        : "0 1px 2px rgba(255,255,255,0.3)",
                   }}
                 >
                   {GLYPH[piece.color][piece.type] + VS}
