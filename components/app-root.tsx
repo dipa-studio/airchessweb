@@ -71,6 +71,7 @@ export function AppRoot() {
   }, [peer.status, peer.role, hostColor])
 
   const connected = peer.status === "connected"
+  const failed = peer.status === "failed"
 
   // ---- Actions ----
   const startHost = useCallback(async () => {
@@ -284,6 +285,12 @@ export function AppRoot() {
               ) : (
                 <p className="text-center text-sm text-muted-foreground">Kód készítése…</p>
               )}
+              {failed && (
+                <p className="rounded-md bg-accent px-4 py-3 text-center text-sm font-semibold text-accent-foreground">
+                  Nem sikerült a kapcsolat. Ellenőrizd, hogy mindkét telefon ugyanazon a WiFi-n / hotspoton van, majd
+                  hozz létre új meghívó kódot az „Újrakezdés" gombbal.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -294,6 +301,15 @@ export function AppRoot() {
               >
                 Válaszkód beolvasása
               </button>
+              {failed && (
+                <button
+                  type="button"
+                  onClick={leave}
+                  className="w-full rounded-md border border-border py-3 text-sm font-semibold text-muted-foreground transition active:scale-[0.98]"
+                >
+                  Újrakezdés
+                </button>
+              )}
             </div>
           )}
 
@@ -346,10 +362,26 @@ export function AppRoot() {
             ) : (
               <p className="text-center text-sm text-muted-foreground">Válaszkód készítése…</p>
             )}
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden />
-              Kapcsolódásra várakozás…
-            </div>
+            {failed ? (
+              <div className="space-y-3">
+                <p className="rounded-md bg-accent px-4 py-3 text-center text-sm font-semibold text-accent-foreground">
+                  Nem sikerült a kapcsolat. Ellenőrizd, hogy mindkét telefon ugyanazon a WiFi-n / hotspoton van, majd
+                  próbáld újra.
+                </p>
+                <button
+                  type="button"
+                  onClick={leave}
+                  className="w-full rounded-md bg-primary py-3 text-sm font-semibold text-primary-foreground transition active:scale-[0.98]"
+                >
+                  Újrakezdés
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden />
+                Kapcsolódásra várakozás…
+              </div>
+            )}
           </div>
         )}
       </div>

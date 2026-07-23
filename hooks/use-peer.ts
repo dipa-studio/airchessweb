@@ -13,11 +13,23 @@ export type PeerStatus =
 
 export type PeerRole = "host" | "guest" | null
 
-// Pure-local ICE (no STUN/TURN) so connection works fully offline on the same
-// WiFi / hotspot. Host + mDNS candidates are enough on one LAN.
-const RTC_CONFIG: RTCConfiguration = { iceServers: [] }
+// Local-first ICE. Host + mDNS candidates cover the fully-offline case (same
+// WiFi / hotspot, no internet). The public STUN servers are only reachable
+// when the internet is available; they add server-reflexive candidates so the
+// handshake also succeeds across different networks or when mDNS is blocked
+// (common on public WiFi with client isolation). Offline behaviour is
+// unchanged — unreachable STUN servers are simply skipped by the ICE agent.
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  ],
+}
 
-function waitForIce(pc: RTCPeerConnection, timeoutMs = 2500): Promise<void> {
+// If the handshake never completes we surface a failure instead of hanging on
+// the "waiting to connect" screen forever.
+const CONNECT_TIMEOUT_MS = 25000
+
+function waitForIce(pc: RTCPeerConnection, timeoutMs = 3500): Promise<void> {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") return resolve()
     const done = () => {
@@ -40,26 +52,54 @@ export function usePeer(onMessage: (data: unknown) => void) {
 
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const dcRef = useRef<RTCDataChannel | null>(null)
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onMessageRef = useRef(onMessage)
   onMessageRef.current = onMessage
 
-  const wireChannel = useCallback((dc: RTCDataChannel) => {
-    dcRef.current = dc
-    dc.onopen = () => setStatus("connected")
-    dc.onclose = () => setStatus((s) => (s === "connected" ? "failed" : s))
-    dc.onmessage = (e) => {
-      try {
-        onMessageRef.current(JSON.parse(e.data))
-      } catch {
-        /* ignore malformed */
-      }
+  const clearWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current)
+      watchdogRef.current = null
     }
   }, [])
+
+  // Start a timeout once the handshake is complete. If the data channel never
+  // opens, flip to "failed" so the UI can show a retry instead of hanging.
+  const startWatchdog = useCallback(() => {
+    clearWatchdog()
+    watchdogRef.current = setTimeout(() => {
+      setStatus((s) => (s === "connected" ? s : "failed"))
+    }, CONNECT_TIMEOUT_MS)
+  }, [clearWatchdog])
+
+  const wireChannel = useCallback(
+    (dc: RTCDataChannel) => {
+      dcRef.current = dc
+      dc.onopen = () => {
+        clearWatchdog()
+        setStatus("connected")
+      }
+      dc.onclose = () => setStatus((s) => (s === "connected" ? "failed" : s))
+      dc.onmessage = (e) => {
+        try {
+          onMessageRef.current(JSON.parse(e.data))
+        } catch {
+          /* ignore malformed */
+        }
+      }
+    },
+    [clearWatchdog],
+  )
 
   const attachConnState = useCallback((pc: RTCPeerConnection) => {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         setStatus((s) => (s === "connected" ? "failed" : s))
+      }
+    }
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "failed") {
+        setStatus((s) => (s === "connected" ? s : "failed"))
       }
     }
   }, [])
@@ -97,9 +137,11 @@ export function usePeer(onMessage: (data: unknown) => void) {
       await waitForIce(pc)
       setLocalCode(encodeSignal(pc.localDescription!))
       setStatus("answer-ready")
+      // Guest is now waiting for the host to scan back — arm the watchdog.
+      startWatchdog()
       return true
     },
-    [attachConnState, wireChannel],
+    [attachConnState, wireChannel, startWatchdog],
   )
 
   // HOST: consume the guest answer (scanned) to complete the handshake.
@@ -110,8 +152,10 @@ export function usePeer(onMessage: (data: unknown) => void) {
     if (!pc) return false
     setStatus("connecting")
     await pc.setRemoteDescription({ type: "answer", sdp: decoded.sdp })
+    // Handshake complete on the host side — arm the watchdog.
+    startWatchdog()
     return true
-  }, [])
+  }, [startWatchdog])
 
   const send = useCallback((data: unknown) => {
     const dc = dcRef.current
@@ -123,6 +167,7 @@ export function usePeer(onMessage: (data: unknown) => void) {
   }, [])
 
   const reset = useCallback(() => {
+    clearWatchdog()
     dcRef.current?.close()
     pcRef.current?.close()
     dcRef.current = null
@@ -130,14 +175,15 @@ export function usePeer(onMessage: (data: unknown) => void) {
     setStatus("idle")
     setRole(null)
     setLocalCode("")
-  }, [])
+  }, [clearWatchdog])
 
   useEffect(() => {
     return () => {
+      clearWatchdog()
       dcRef.current?.close()
       pcRef.current?.close()
     }
-  }, [])
+  }, [clearWatchdog])
 
   return { status, role, localCode, createHost, joinWithOffer, acceptAnswer, send, reset }
 }
